@@ -1,3 +1,9 @@
+---
+header-includes:
+  - \usepackage{fvextra}
+  - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+---
+
 # Tuplet
 
 an esoteric, programmatic music notation geared towards breakcore production
@@ -68,8 +74,8 @@ For example, fitting three eighth notes into the space of one quarter note.
 
 ### Oneshot
 
-In Tuplet, a oneshot is a named binding, which can be a note,
-pattern, or tuplet.
+In Tuplet, a oneshot is a note, pattern, or tuplet. Oneshots can be
+bound to a name.
 
 ### Note
 
@@ -116,7 +122,7 @@ a pattern of notes fit into a given number of beats?
 
 ### Simple Rhythm
 
-```
+```{.lisp .numberLines}
 (let o (load-file “kick.wav”))
 (let x (load-file “snare.wav”))
 (let pitched (pitch x 5)) ; pitched up 5 semitones
@@ -146,7 +152,7 @@ and FL Studio, respectively:
 
 ### "Polyriddim"
 
-```
+```{.lisp .numberLines}
 (let w (load-file “wub.wav”))
 (let _ (1))
 (track “polyriddim_drop_wubs” 122.5 (
@@ -174,7 +180,7 @@ in terms of eighth notes, instead of quarter notes.
 
 ### Breakcore
 
-```
+```{.lisp .numberLines}
 (let (k1 k2 s1 (3 h1 s2 h2 s3 k3 k4) s4 (1 r1 r2) k5 k6 s5 (3 h3 s6 h4 s7 (2 s8)) (2 h5)) (load-file-split “cw_amen02_165.wav”))
 (let _ (1)) (let two_snare (1 s1 s1)) (let two_kick (1 k1 k2))
 (let ss_s (1 two_snare s1) (let s_ss (1 s1 two_snare))) (let kk_s (1 two_kick s1) (let s_kk (1 s1 two_kick)))
@@ -207,6 +213,86 @@ manual splicing seen here:
 ![a screenshot of a large number of individually sliced audio clips in fl studio](./assets/breakcore-ex-flstudio.png)
 
 ## Syntax
+
+### Functions
+
+#### load-file
+`String Rational? Rational? -> Note`
+
+Given a filename, and optionally a number of seconds to chop off of
+the start and end, respectively, this function reads a file and
+creates a Note from its audio data.
+
+#### pitch
+`Note Rational -> Note`
+
+Given a filename, and the number of semitones to shift by (positive or negative,
+where the decimal portion corresponds to the change in cents), return a
+copy of the note shifted by the given value.
+
+#### reverse
+`Note -> Note`
+
+Given a note, returns a copy of the note reversed.
+
+#### should-play-tail
+`Note Bool -> Note`
+
+Sets on a copy whether the given note continues to play after another note
+has started. If this function is not used, the corresponding value
+on the Note data representation will be false.
+
+#### play-track
+`Track -> Void`
+
+Renders the track to audio and plays it.
+
+#### export-track
+`String Track -> Void`
+
+Renders the track to audio and saves it as a WAV file at the given path.
+
+#### export-midi
+`String Track -> Void`
+
+Renders the track to a MIDI file, saving it at the given path.
+
+### Macros
+
+#### Bindings
+
+```{}
+<let> := (let <id> <expr>) | (let <pattern> <expr>)
+<expr> := <oneshot> | Any -> Note
+```
+Creates local bindings for the musical expressions. It can be assigned a name, which
+would allow it to be referenced later in the program.
+
+#### Patterns
+
+```{}
+<pattern> := (<oneshot> ...)
+```
+A pattern macro defines sequences of musical one shots, either with or without a specified
+tempo.
+
+#### Tuplets
+
+```{}
+<tuplet> := ([Rational] <oneshot> ...)
+```
+The tuplet macro groups musical elements into a tuplet, which ensures that they each
+fit within the given rhythmic subdivision. 
+
+#### Tracks
+
+```{}
+<track> := (track <string> [Rational] (<tuplet>...+))
+```
+The track defines a musical track by assigning it a name, a tempo (in beats per minute),
+and a sequence of musical oneshots - ie. patterns, tuplets, notes, or rests. We provide
+the track name as a string and specify that the tempo must be a rational number. This allows
+multiple patterns to be included and they can each define a segment of the track.
 
 ## Implementation Milestones
 
