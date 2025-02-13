@@ -4,9 +4,107 @@ an esoteric, programmatic music notation geared towards breakcore production
 
 ## Background
 
+Breakcore is a subgenre of electronic music characterized by meticulous,
+rapid-fire splicing of drum loops. The preferred method of creation for
+many breakcore artists involves manually cutting and positioning audio
+clips to a note grid in a digital audio workstation (DAW).
+
+Other ways to programmatically define music with text do already exist,
+howewever there are few that are particularly suited for this
+domain. Many focus on procedural patterns and sound design, like
+[Chuck](https://chuck.cs.princeton.edu/) and [Glicol](https://glicol.org/).
+Others, like [Music Macro Language](https://en.wikipedia.org/wiki/Music_Macro_Language),
+are built for other domains (in this instance, chiptune).
+
+While writing this design doc, we discovered [Tidal Cycles](http://tidalcycles.org/),
+a language that, alongside synthesis, has much of the patterning functionality
+we aim to implement in Tuplet (and then some). It also is built around
+live-coding, ~~and I (Aiden) am probably going to play with it more in my free time~~.
+However, it appears to lack the binding ergonomics we wish to include in Tuplet,
+and it seems geared more towards writing small patterns that layer atop one another
+than building long tracks.
+
 ## Domain Concepts
 
+### Note
+
+A note is a single sound played for a period of time. It can be pitched or unpitched.
+
+### Beat
+
+A beat is a single unit of time in music. The length of notes is often described
+in beats. For example, often a "whole note" is four beats, a "half note" is two beats,
+a "quarter note" is one beat, an "eighth note" is half a beat, etc.
+
+### Tempo
+
+The tempo is the rate of beats in a song, often defined as minutes per second.
+
+### Rest
+
+Has the same descriptions of length as a note, but denotes a pause in playing.
+
+### Measure
+
+A unit of a grouping of beats. A series of measures composes a song. Each measure
+has a length defined by the song or section's time signature, which is represented
+with two numbers. The top number is the number of beats in a measure, and the bottom
+number is the type of note that constitutes a single beat. For example, a measure
+in 4/4 consists of the length of time of four quarter notes. A measure in 7/8
+consists of the length of time of seven eighth notes.
+
+### Tuplet
+
+A series of notes that are fit into a number of beats they normally would not.
+For example, fitting three eighth notes into the space of one quarter note.
+
 ## Linguistic Features
+
+### Oneshot
+
+In Tuplet, a oneshot is a named binding, which can be a note,
+pattern, or tuplet.
+
+### Note
+
+Instead of including a pitch, a note is a single audio sample loaded from
+an audio file. It can be passed into functions that apply transformations
+to single notes, such as pitch shifting or reversing.
+
+Additionally, there will be syntax allowing the user to splice a single
+file into muliple notes based on a pattern. (See the breakcore example
+below for more information.)
+
+### Pattern
+
+A pattern is a sequence of oneshots. This sequence does not stretch
+or squeeze its contents. Instead, placing a pattern is treated the
+same as if each oneshot contained within the pattern was placed
+manually. The main purpose of patterns is to reuse common snippets,
+additionally allowing the flexibility of using the same pattern at
+different speeds.
+
+### Tuplet
+
+A tuplet is also a sequence of oneshots. Unlike patterns, however,
+tuplets will stretch or squeeze its contents to fit into the number
+of beats provided when a tuplet is written. Using tuplets is the
+primary means of which rhythms are described in Tuplet.
+
+If you're familiar with web development, you can think of tuplets
+as similar to flex containers, which notes having a flex-grow of
+1, and n-tuplets having a flex-grow of n.
+
+### Track
+
+A track is a sequence of tuplets that are played at a given tempo.
+We plan to have functions that can play a track as audio, export a
+track to an audio file, and export a track to a MIDI file.
+
+Of note, the fact that a track is a sequence of tuplets makes relatively
+complex concepts like time signature changes and irregular time signatures
+an easy and natural part of the language. Really, what is a measure if not
+a pattern of notes fit into a given number of beats?
 
 ## Examples
 
