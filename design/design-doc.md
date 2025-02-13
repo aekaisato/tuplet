@@ -9,6 +9,12 @@ rapid-fire splicing of drum loops. The preferred method of creation for
 many breakcore artists involves manually cutting and positioning audio
 clips to a note grid in a digital audio workstation (DAW).
 
+The main source of friction when working in a DAW is that it's relatively
+slow (it is manual splicing, after all). Additionally, when doing complex
+rhythmic patterns, it can be difficult to make changes without deleting
+and remaking the part of the measure you want to change. The goal of
+Tuplet, then, is to make writing and editing complex rhythms easier.
+
 Other ways to programmatically define music with text do already exist,
 howewever there are few that are particularly suited for this
 domain. Many focus on procedural patterns and sound design, like
@@ -171,7 +177,7 @@ in terms of eighth notes, instead of quarter notes.
 ```
 (let (k1 k2 s1 (3 h1 s2 h2 s3 k3 k4) s4 (1 r1 r2) k5 k6 s5 (3 h3 s6 h4 s7 (2 s8)) (2 h5)) (load-file-split “cw_amen02_165.wav”))
 (let _ (1)) (let two_snare (1 s1 s1)) (let two_kick (1 k1 k2))
-(let ss_s (1 two_snare s1) (let s_ss (1 s1 two_snare)) (let kk_s (1 two_kick s1) (let s_kk (1 s1 two_kick))
+(let ss_s (1 two_snare s1) (let s_ss (1 s1 two_snare))) (let kk_s (1 two_kick s1) (let s_kk (1 s1 two_kick)))
 (let h5_pitched (pitch h5 2)) (let s1_pitched (pitch s1 2)) (let k2_pitched (pitch k2 -2)) (let s1_pitched_2 (pitch s1 4))
 (let pattern1 (two_kick s_ss (1 h2 h1 k3 k3)))
 (track “breakcore_beat_part1” 180 (
@@ -226,18 +232,18 @@ The core functionality is implemented in this step. We would likely
 process the track to a "flattened" track that is then passed to functions
 for audio or MIDI export.
 
-### Implement macros for tuplets
+### Implement macros (including syntax checks) for tuplets
 
 These macros allow us to get closer to our intended surface syntax. We
 decided to do this first because it is the most integral feature to
 get right, syntax-wise.
 
-### Implement macros for variable binding
+### Implement macros (including syntax checks) for variable binding
 
 Adding basic variable binding will greatly improve the ergonomics of our language.
 Binding based on a pattern structure will be added much later.
 
-### Implement macros for patterns
+### Implement macros (including syntax checks) for patterns
 
 Once we add syntax for patterns (which only exist in syntax), we can build
 tracks identical to the examples (though the variable definitions will have
@@ -249,7 +255,7 @@ These functions would improve the ergonomics of loading and using files,
 since you don't have to bounce to a different piece of software to accompolish
 common edits to an audio sample.
 
-### Add runtime functions and macro for splicing samples during load
+### Add runtime functions and macro (including syntax checks) for splicing samples during load
 
 This is an arguably less crucial, yet still important feature for our language.
 It builds off of previous work on patterns, loading files, and tuplet squeezing.
