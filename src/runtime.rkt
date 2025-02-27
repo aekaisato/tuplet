@@ -2,13 +2,16 @@
 
 (require rsound)
 
-(define/contract (oneshot? x) (-> any/c boolean?) (or (tuplet? x) (note? x)))
+(define/contract (oneshot? x) (-> any/c boolean?) (or (tuplet? x) (note? x) (pattern? x)))
 
 ; represents a single sound that can be played
 (define-struct/contract note ([sound rsound?] [chop? boolean?]))
 
 ; represents a series of oneshots that "squeeze" to fit into the given number of beats
 (define-struct/contract tuplet ([beats (and/c (not/c negative?) rational?)] [contents (listof oneshot?)]))
+
+; represents a series of oneshots that don't "squeeze" to fit into the given number of beats
+(define-struct/contract pattern ([contents (listof oneshot?)]))
 
 ; represents a full audio track
 (define-struct/contract track ([name string?] [bpm (and/c positive? rational?)] [measures (listof tuplet?)]))
@@ -24,6 +27,14 @@
   (-> (and/c positive? rational?) nonnegative-integer?)
   (define sample-rate (default-sample-rate))
   (round (* (* (/ 1 bpm) 60) sample-rate)))
+
+(define/contract (rhythm-size oneshot-list)
+  (-> (listof oneshot?) integer?)
+  (match oneshot-list
+    ['() 0]
+    [(cons (note _ _) rest) (+ 1 (rhythm-size rest))]
+    [(cons (tuplet beats _) rest) (+ beats (rhythm-size rest))]
+    [(cons (pattern contents) rest) (+ (rhythm-size contents) (rhythm-size rest))]))
 
 ; squeezes a track by placing notes at in-out points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-track track)
@@ -49,16 +60,26 @@
            (squeeze-oneshot-list rest next-beat samples-per-beat))]
     [(cons (tuplet beats contents) rest)
      (define next-beat (+ starting-sample (* samples-per-beat beats)))
-     (define tup-assembly (squeeze-tuplet (tuplet beats contents) starting-sample (/ samples-per-beat beats)))
-     (append tup-assembly (squeeze-oneshot-list rest next-beat samples-per-beat))]))
+     (define tup-assembly (squeeze-tuplet (tuplet beats contents) starting-sample samples-per-beat))
+     (append tup-assembly (squeeze-oneshot-list rest next-beat samples-per-beat))]
+    [(cons (pattern contents) rest)
+     (define next-beat (+ starting-sample (* samples-per-beat (rhythm-size contents))))
+     (append (squeeze-pattern (pattern contents) starting-sample samples-per-beat) (squeeze-oneshot-list rest next-beat samples-per-beat))]))
 
 ; squeezes a tuplet by placing notes at in-out points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-tuplet tup starting-sample samples-per-beat)
   (-> tuplet? (not/c negative?) (not/c negative?) (listof note-assembly?))
   (define tup-beats (tuplet-beats tup))
   (define tup-contents (tuplet-contents tup))
-  (define ratio (/ tup-beats (length tup-contents)))
-  (squeeze-oneshot-list tup-contents starting-sample (* samples-per-beat ratio)))
+  (define size (rhythm-size tup-contents))
+  (cond [(= size 0) '()]
+        [else (define ratio (/ tup-beats size))
+              (squeeze-oneshot-list tup-contents starting-sample (* samples-per-beat ratio))]))
+
+; places in-out points for notes contained in a pattern
+(define/contract (squeeze-pattern pat starting-sample samples-per-beat)
+  (-> pattern? (not/c negative?) (not/c negative?) (listof note-assembly?))
+  (squeeze-oneshot-list (pattern-contents pat) starting-sample samples-per-beat))
 
 ; assembles a track-assembly to a single rsound that can be played or exported as audio
 (define/contract (assemble-track assembly)
@@ -86,7 +107,7 @@
          (list
           (tuplet 4 (list k r s r))
           (tuplet 4 (list k s (tuplet 1 (list k k)) h))
-          (tuplet 4 (list k r s r))
+          (tuplet 4 (list k (pattern (list r (tuplet 2 (list s (tuplet 1 '()) r (tuplet 1 '())))))))
           (tuplet 4 (list s s s s s s s s))
           (tuplet 4 (list (tuplet 1 (list k k)) (tuplet 1 (list s (tuplet 1 (list s k)))) (tuplet 1 (list r r k k)) (tuplet 1 (list s (tuplet 1 (list s h))))))
           )))
