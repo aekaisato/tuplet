@@ -17,7 +17,7 @@
 (define-struct/contract track ([name string?] [bpm (and/c positive? rational?)] [measures (listof tuplet?)]))
 
 ; intermediary format for notes that includes the sample to start playing and the sample to stop playing
-(define-struct/contract note-assembly ([sound rsound?] [in-sample (not/c negative?)] [out-sample (or/c false? (not/c negative?))]))
+(define-struct/contract note-assembly ([sound rsound?] [in-sample (not/c negative?)] [out-sample (not/c negative?)]))
 
 ; intermediate format for tracks intended to map to input for rsound's assemble
 (define-struct/contract track-assembly ([assembly (listof note-assembly?)]))
@@ -56,7 +56,7 @@
     ['() '()]
     [(cons (note sound chop?) rest)
      (define next-beat (+ starting-sample samples-per-beat))
-     (cons (note-assembly sound starting-sample (if chop? next-beat #f))
+     (cons (note-assembly sound starting-sample (if chop? next-beat (+ starting-sample (rs-frames sound))))
            (squeeze-oneshot-list rest next-beat samples-per-beat))]
     [(cons (tuplet beats contents) rest)
      (define next-beat (+ starting-sample (* samples-per-beat beats)))
@@ -89,9 +89,8 @@
                         (define s (note-assembly-sound note-asm))
                         (define s-len (rs-frames s))
                         (define in (round (note-assembly-in-sample note-asm)))
-                        (define out-maybe (note-assembly-out-sample note-asm))
-                        (define out (if out-maybe (round out-maybe) (+ in s-len)))
-                        (define rs (if out (clip s 0 (min (- out in) s-len)) s))
+                        (define out (note-assembly-out-sample note-asm))
+                        (define rs (clip s 0 (min (- out in) s-len)))
                         (list rs in)) asm))
   (assemble rs-asm))
 
