@@ -2,6 +2,8 @@
 
 (require rsound)
 
+(provide oneshot? note note? tuplet tuplet? pattern pattern? track track? squeeze-track assemble-track)
+
 (define/contract (oneshot? x) (-> any/c boolean?) (or (tuplet? x) (note? x) (pattern? x)))
 
 ; represents a single sound that can be played
@@ -89,30 +91,7 @@
                         (define s (note-assembly-sound note-asm))
                         (define s-len (rs-frames s))
                         (define in (round (note-assembly-in-sample note-asm)))
-                        (define out (note-assembly-out-sample note-asm))
+                        (define out (round (note-assembly-out-sample note-asm)))
                         (define rs (clip s 0 (min (- out in) s-len)))
                         (list rs in)) asm))
   (assemble rs-asm))
-
-; scratch area
-
-(define k (note (rs-read (normalize-path "../examples/samples/k.wav")) #t))
-(define s (note (rs-read (normalize-path "../examples/samples/s.wav")) #t))
-(define r (note (rs-read (normalize-path "../examples/samples/r.wav")) #t))
-(define h (note (rs-read (normalize-path "../examples/samples/h.wav")) #f))
-
-(define tracktest
-  (track "test1" 180
-         (list
-          (tuplet 4 (list k r s r))
-          (tuplet 4 (list k s (tuplet 1 (list k k)) h))
-          (tuplet 4 (list k (pattern (list r (tuplet 2 (list s (tuplet 1 '()) r (tuplet 1 '())))))))
-          (tuplet 4 (list s s s s s s s s))
-          (tuplet 4 (list (tuplet 1 (list k k)) (tuplet 1 (list s (tuplet 1 (list s k)))) (tuplet 1 (list r r k k)) (tuplet 1 (list s (tuplet 1 (list s h))))))
-          )))
-
-(define tracktest-asm (squeeze-track tracktest))
-
-(define assembled (assemble-track tracktest-asm))
-
-(play assembled)
