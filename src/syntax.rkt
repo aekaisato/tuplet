@@ -93,6 +93,6 @@
     [(_ (op:prim arg ...))
      (define/with-syntax fmt-op (format-symbol "rt:~a" #'op))
      #'(fmt-op arg ...)]
-    [(_  n:note) #'n]
+    [(_ n:note) #'n]
     [(_ t:tup) #'(compile-tuplet t)]
     [(_ p:pat) #'(compile-pattern p)]))
