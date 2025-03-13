@@ -2,7 +2,7 @@
 
 (require rsound)
 
-(provide oneshot? note note? tuplet tuplet? pattern pattern? track track? squeeze-track assemble-track)
+(provide oneshot? note note? tuplet tuplet? pattern pattern? track track? squeeze-track assemble-track load play! save!)
 
 (define/contract (oneshot? x) (-> any/c boolean?) (or (tuplet? x) (note? x) (pattern? x)))
 
@@ -22,7 +22,7 @@
 (define-struct/contract note-assembly ([sound rsound?] [in-sample (not/c negative?)] [out-sample (not/c negative?)]))
 
 ; intermediate format for tracks intended to map to input for rsound's assemble
-(define-struct/contract track-assembly ([assembly (listof note-assembly?)]))
+(define-struct/contract track-assembly ([name string?] [assembly (listof note-assembly?)]))
 
 ; convert a number from beats-per-minute to samples-per-beat
 (define/contract (bpm-to-samples bpm)
@@ -49,7 +49,7 @@
        (cons (squeeze-tuplet (tuplet beats contents) starting-sample samples-per-beat)
              (helper rest (+ starting-sample (* samples-per-beat beats))))]))
   (define assembly (flatten (helper (track-measures track) 0)))
-  (track-assembly assembly))
+  (track-assembly (track-name track) assembly))
 
 ; squeezes a list of oneshots by placing notes at in-out points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-oneshot-list ls starting-sample samples-per-beat)
@@ -95,3 +95,33 @@
                         (define rs (clip s 0 (min (- out in) s-len)))
                         (list rs in)) asm))
   (assemble rs-asm))
+
+; loads a wav file based on the given filepath
+; if provided, numbers represent the in and out points, in samples, where the number represents the in point if only one is provided (defaults to no clipping)
+; if provided, boolean represents whether to chop off the end of the sound at the end of the beat (defaults to true)
+(define/contract (load path #:in [in #f] #:out [out #f] #:chop? [chop? #t])
+  (->* (path-string?) (#:in (or/c nonnegative-integer? boolean?) #:out (or/c nonnegative-integer? boolean?) #:chop? boolean?) note?)
+  (define normpath (normalize-path path))
+  (cond
+    [(and in out) (note (rs-read/clip normpath in out) chop?)]
+    [in (define rs (rs-read normpath))
+        (note (clip rs in (rs-frames rs)) chop?)]
+    [#t (note (rs-read normpath) chop?)]))
+
+; plays the track output through the default audio device
+(define/contract (play! track)
+  (-> track-assembly? void?)
+  (play (assemble-track track))
+  (void))
+
+; saves a wav file containing the track output audio at the specified path (defaults to cwd)
+(define/contract (save! track [path "./"])
+  (-> track-assembly? path-string? void?)
+  (define name (track-assembly-name track))
+  (define normpath (normalize-path path))
+  (define type (file-or-directory-type normpath))
+  (define fullpath
+    (match type
+      [(or 'directory 'directory-link) (build-path normpath (string-append name ".wav"))]
+      [_ normpath]))
+  (rs-write (assemble-track track) fullpath))

@@ -1,5 +1,5 @@
 #lang racket
 
-(require (rename-in "src/syntax.rkt" (tlet let)))
+(require "src/syntax.rkt")
 
-(provide let track load play save)
+(provide let track load play! save!)

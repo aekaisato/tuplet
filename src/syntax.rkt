@@ -2,7 +2,7 @@
 
 (require (prefix-in rt: "runtime.rkt") (prefix-in rsound: rsound) syntax-spec-v3 (for-syntax syntax/parse))
 
-(provide tlet track load play save)
+(provide track (rename-out [tlet let] [rt:load load] [rt:save! save!] [rt:play! play!]))
 
 (syntax-spec
  ; track - binds a series of tuplets as a squeezed track
@@ -22,14 +22,11 @@
 
  ; a bind is either a oneshot (a tuplet, pattern, or note), or an arbitrary expression (that should eval to a oneshot)
  (nonterminal bind-spec
-              tuplet:tuplet-spec
-              pattern:pattern-spec
-              note:note-spec
               expr:racket-expr)
 
  ; a tuplet is a number of beats, followed by zero or more oneshots
  (nonterminal tuplet-spec
-              (beats:racket-expr oneshot:racket-expr ...))
+              (beats:number oneshot:racket-expr ...))
 
  ; a pattern is a series of zero or more oneshots
  (nonterminal pattern-spec
@@ -76,37 +73,7 @@
 (define-syntax compile-bind
   (syntax-parser
     #:datum-literals (#%host-expression load)
-    [(_ ((#%host-expression load) (#%host-expression arg) ...)) #'(load arg ...)]
+    [(_ (#%host-expression (load arg ...))) #'(rt:load arg ...)]
     [(_ (#%host-expression note:id)) #'note]
-    [(_ ((#%host-expression beats:number) oneshot ...)) #'(compile-tuplet (beats oneshot ...))]
+    [(_ (#%host-expression (beats:number oneshot ...))) #'(compile-tuplet (beats oneshot ...))]
     [(_ (#%host-expression (oneshot ...))) #'(compile-pattern (oneshot ...))]))
-
-; String -> Note
-; String Boolean -> Note
-; String Number -> Note
-; String Number Boolean -> Note
-; String Number Number -> Note
-; String Number Number Boolean -> Note
-; loads a wav file based on the given filepath
-; if provided, numbers represent the in and out points, in samples, where the number represents the in point if only one is provided (defaults to no clipping)
-; if provided, boolean represents whether to chop off the end of the sound at the end of the beat (defaults to true)
-(define-syntax load
-  (syntax-parser
-    [(_ path:string) #'(rt:note (rsound:rs-read (normalize-path path)) #t)]
-    [(_ path:string chop?:boolean) #'(rt:note (rsound:rs-read (normalize-path path)) chop?)]
-    [(_ path:string in:number) #'(rt:note (let [(rs (rsound:rs-read (normalize-path path)))] (rsound:clip rs in (rsound:rs-frames rs))) #t)]
-    [(_ path:string in:number chop?:boolean) #'(rt:note (let [(rs (rsound:rs-read (normalize-path path)))] (rsound:clip rs in (rsound:rs-frames rs))) chop?)]
-    [(_ path:string in:number out:number) #'(rt:note (rsound:rs-read/clip (normalize-path path) in out) #t)]
-    [(_ path:string in:number out:number chop?:boolean) #'(rt:note (rsound:rs-read/clip (normalize-path path) in out) chop?)]))
-
-; TrackId -> Void
-; plays the track output through the default audio device
-(define-syntax play
-  (syntax-parser
-    [(_ track:id) #'(rsound:play (rt:assemble-track track))]))
-
-; TrackId String -> Void
-; saves a wav file containing the track output audio at the specified path
-(define-syntax save
-  (syntax-parser
-    [(_ track:id path:string) #'(rsound:rs-write (rt:assemble-track track) path)]))
