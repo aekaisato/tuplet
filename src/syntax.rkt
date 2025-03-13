@@ -2,7 +2,7 @@
 
 (require (prefix-in rt: "runtime.rkt") (prefix-in rsound: rsound) syntax-spec-v3 (for-syntax syntax/parse racket/syntax))
 
-(provide track (rename-out [tlet let] [rt:load load] [rt:save! save!] [rt:play! play!]))
+(provide track (rename-out [tlet let]))
 
 (begin-for-syntax
   ; a oneshot is either a note, tuplet, or pattern

@@ -4,6 +4,7 @@
 
 (provide oneshot? note note? tuplet tuplet? pattern pattern? track track? squeeze-track assemble-track load play! save!)
 
+; a oneshot is either a note, tuplet, or pattern
 (define/contract (oneshot? x) (-> any/c boolean?) (or (tuplet? x) (note? x) (pattern? x)))
 
 ; represents a single sound that can be played
