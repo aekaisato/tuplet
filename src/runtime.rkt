@@ -10,7 +10,7 @@
 (define-struct/contract note ([sound rsound?] [chop? boolean?]))
 
 ; represents a series of oneshots that "squeeze" to fit into the given number of beats
-(define-struct/contract tuplet ([beats (and/c (not/c negative?) rational?)] [contents (listof oneshot?)]))
+(define-struct/contract tuplet ([beats (and/c positive? rational?)] [contents (listof oneshot?)]))
 
 ; represents a series of oneshots that don't "squeeze" to fit into the given number of beats
 (define-struct/contract pattern ([contents (listof oneshot?)]))
