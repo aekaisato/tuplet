@@ -117,7 +117,7 @@
 
 ; saves a wav file containing the track output audio at the specified path (defaults to cwd)
 (define/contract (save! track [path "./"])
-  (-> track-assembly? path-string? void?)
+  (->* (track-assembly?) (path-string?) void?)
   (define name (track-assembly-name track))
   (define normpath (normalize-path path))
   (define type (file-or-directory-type normpath))
