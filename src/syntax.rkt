@@ -4,11 +4,29 @@
 
 (provide track (rename-out [tlet let] [rt:load load] [rt:save! save!] [rt:play! play!]))
 
+(begin-for-syntax
+  ; a oneshot is either a note, tuplet, or pattern
+  (define-syntax-class oneshot
+    (pattern (~or t:tuplet n:note p:pattern)))
+
+  ; a note within a track should just be a binding to a note
+  (define-syntax-class note
+    (pattern n:id))
+
+  ; a tuplet is a number of beats, followed by zero or more oneshots
+  (define-syntax-class tuplet
+    (pattern (beats:number oneshot:oneshot ...)))
+
+  ; a pattern is a series of zero or more oneshots
+  (define-syntax-class pattern
+    (pattern (oneshot:oneshot ...)))
+  )
+
 (syntax-spec
  ; track - binds a series of tuplets as a squeezed track
  ; <track> := (track [Datum] [Rational] (<tuplet>...+))
  (host-interface/definitions
-  (track name:racket-var bpm:racket-expr measure:tuplet-spec ...)
+  (track name:racket-var bpm:racket-expr measure:tuplet ...+)
   #:binding (export name)
   #`(define name (rt:squeeze-track (rt:track #,(symbol->string (syntax->datum #'name)) bpm (list (compile-tuplet measure) ...)))))
 
@@ -16,25 +34,9 @@
  ; <tlet> := (let <id> <expr>)
  ; <expr> := <oneshot> | (load [String] [Boolean?])
  (host-interface/definitions
-  (tlet name:racket-var bind:bind-spec)
+  (tlet name:racket-var bind:racket-expr)
   #:binding (export name)
   #'(define name (compile-bind bind)))
-
- ; a bind is either a oneshot (a tuplet, pattern, or note), or an arbitrary expression (that should eval to a oneshot)
- (nonterminal bind-spec
-              expr:racket-expr)
-
- ; a tuplet is a number of beats, followed by zero or more oneshots
- (nonterminal tuplet-spec
-              (beats:number oneshot:racket-expr ...))
-
- ; a pattern is a series of zero or more oneshots
- (nonterminal pattern-spec
-              (oneshot:racket-expr ...))
-
- ; a note within a track should just be a binding to a note
- (nonterminal note-spec
-              note:racket-var)
  )
 
 ; Syntax -> Syntax
@@ -42,9 +44,7 @@
 ; there are some complications involving handling #%host-expression
 (define-syntax compile-tuplet
   (syntax-parser
-    [(_ (beats oneshot ...)) #'(rt:tuplet beats (list (compile-oneshot oneshot) ...))]
-    [(_ (#%host-expression (beats:number oneshot ...))) #'(rt:tuplet beats (list (compile-oneshot oneshot) ...))]
-    [(_ ((#%host-expression beats:number) oneshot ...)) #'(rt:tuplet beats (list (compile-oneshot oneshot) ...))]))
+    [(_ (beats:number oneshot ...)) #'(rt:tuplet beats (list (compile-oneshot oneshot) ...))]))
 
 ; Syntax -> Syntax
 ; converts a pattern syntax object to a runtime pattern struct
@@ -58,13 +58,8 @@
 ; there are some complications involving handling #%host-expression
 (define-syntax compile-oneshot
   (syntax-parser
-    #:datum-literals (#%host-expression)
-    [(_ (#%host-expression note:id)) #'note]
     [(_ note:id) #'note]
-    [(_ ((#%host-expression beats:number) oneshot ...)) #'(compile-tuplet (beats oneshot ...))]
     [(_ (beats:number oneshot ...)) #'(compile-tuplet (beats oneshot ...))]
-    [(_ (#%host-expression (beats:number oneshot ...))) #'(compile-tuplet (beats oneshot ...))]
-    [(_ (#%host-expression (oneshot ...))) #'(compile-pattern (oneshot ...))]
     [(_ (oneshot ...)) #'(compile-pattern (oneshot ...))]))
 
 ; Syntax -> Syntax
