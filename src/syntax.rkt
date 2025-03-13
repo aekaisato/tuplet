@@ -64,21 +64,18 @@
 
 ; Syntax -> Syntax
 ; converts a tuplet syntax object to a runtime tuplet struct
-; there are some complications involving handling #%host-expression
 (define-syntax compile-tuplet
   (syntax-parser
     [(_ t:tup) #'(rt:tuplet t.beats (list (compile-oneshot t.oneshot) ...))]))
 
 ; Syntax -> Syntax
 ; converts a pattern syntax object to a runtime pattern struct
-; there are some complications involving handling #%host-expression
 (define-syntax compile-pattern
   (syntax-parser
     [(_ p:pat) #'(rt:pattern (list (compile-oneshot p.oneshot) ...))]))
 
 ; Syntax -> Syntax
 ; converts a oneshot syntax object to its respective runtime struct, depending on its shape
-; there are some complications involving handling #%host-expression
 (define-syntax compile-oneshot
   (syntax-parser
     [(_ n:note) #'n]
