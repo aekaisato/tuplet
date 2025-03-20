@@ -107,6 +107,7 @@
     [(and in out) (note (rs-read/clip normpath in out) chop?)]
     [in (define rs (rs-read normpath))
         (note (clip rs in (rs-frames rs)) chop?)]
+    [out (note (rs-read/clip normpath 0 out) chop?)]
     [#t (note (rs-read normpath) chop?)]))
 
 ; plays the track output through the default audio device
