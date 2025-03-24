@@ -87,9 +87,7 @@
 ; otherwise, compiles oneshot depending on shape
 (define-syntax compile-bind
   (syntax-parser
-    [(_ (op:prim arg ...))
-     (define/with-syntax fmt-op (format-symbol "rt:~a" #'op))
-     #'(fmt-op arg ...)]
+    [(_ (op:prim arg ...)) #'(op arg ...)]
     [(_ n:note) #'n]
     [(_ t:tup) #'(compile-tuplet t)]
     [(_ p:pat) #'(compile-pattern p)]))
