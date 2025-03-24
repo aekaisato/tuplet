@@ -2,10 +2,10 @@
 
 (require rsound)
 
-(provide oneshot? note note? tuplet tuplet? pattern pattern? track track? squeeze-track assemble-track load play! save!)
+(provide oneshot? note note? tuplet tuplet? pattern pattern? track track? polyrhythm polyrhythm? squeeze-track assemble-track load play! save!)
 
 ; a oneshot is either a note, tuplet, or pattern
-(define/contract (oneshot? x) (-> any/c boolean?) (or (tuplet? x) (note? x) (pattern? x)))
+(define/contract (oneshot? x) (-> any/c boolean?) (or (tuplet? x) (note? x) (pattern? x) (polyrhythm? x)))
 
 ; represents a single sound that can be played
 (define-struct/contract note ([sound rsound?] [chop? boolean?]))
@@ -16,11 +16,14 @@
 ; represents a series of oneshots that don't "squeeze" to fit into the given number of beats
 (define-struct/contract pattern ([contents (listof oneshot?)]))
 
+; represents a series of patterns that will all play at once to create polyrhthmic sequences
+(define-struct/contract polyrhythm ([contents (listof pattern?)]))
+
 ; represents a full audio track
 (define-struct/contract track ([name string?] [bpm (and/c positive? rational?)] [measures (listof tuplet?)]))
 
 ; intermediary format for notes that includes the sample to start playing and the sample to stop playing
-(define-struct/contract note-assembly ([sound rsound?] [in-sample (not/c negative?)] [out-sample (not/c negative?)]))
+(define-struct/contract note-assembly ([sound rsound?] [in-sample (not/c negative?)] [chop? boolean?]))
 
 ; intermediate format for tracks intended to map to input for rsound's assemble
 (define-struct/contract track-assembly ([name string?] [assembly (listof note-assembly?)]))
@@ -37,7 +40,8 @@
     ['() 0]
     [(cons (note _ _) rest) (+ 1 (rhythm-size rest))]
     [(cons (tuplet beats _) rest) (+ beats (rhythm-size rest))]
-    [(cons (pattern contents) rest) (+ (rhythm-size contents) (rhythm-size rest))]))
+    [(cons (pattern contents) rest) (+ (rhythm-size contents) (rhythm-size rest))]
+    [(cons (polyrhythm ptrns) rest) (+ 1 (rhythm-size rest))]))
 
 ; squeezes a track by placing notes at in-out points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-track track)
@@ -59,7 +63,7 @@
     ['() '()]
     [(cons (note sound chop?) rest)
      (define next-beat (+ starting-sample samples-per-beat))
-     (cons (note-assembly sound starting-sample (if chop? next-beat (+ starting-sample (rs-frames sound))))
+     (cons (note-assembly sound starting-sample chop?)
            (squeeze-oneshot-list rest next-beat samples-per-beat))]
     [(cons (tuplet beats contents) rest)
      (define next-beat (+ starting-sample (* samples-per-beat beats)))
@@ -67,7 +71,13 @@
      (append tup-assembly (squeeze-oneshot-list rest next-beat samples-per-beat))]
     [(cons (pattern contents) rest)
      (define next-beat (+ starting-sample (* samples-per-beat (rhythm-size contents))))
-     (append (squeeze-pattern (pattern contents) starting-sample samples-per-beat) (squeeze-oneshot-list rest next-beat samples-per-beat))]))
+     (append (squeeze-pattern (pattern contents) starting-sample samples-per-beat) (squeeze-oneshot-list rest next-beat samples-per-beat))]
+    [(cons (polyrhythm ptrns) rest)
+     (define next-beat (+ starting-sample samples-per-beat))
+     (define poly-assembly (flatten (map (lambda (pat)
+                                           (squeeze-pattern pat starting-sample (/ samples-per-beat (rhythm-size (pattern-contents pat)))))
+                                         ptrns)))
+     (append poly-assembly (squeeze-oneshot-list rest next-beat samples-per-beat))]))
 
 ; squeezes a tuplet by placing notes at in-out points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-tuplet tup starting-sample samples-per-beat)
@@ -87,14 +97,16 @@
 ; assembles a track-assembly to a single rsound that can be played or exported as audio
 (define/contract (assemble-track assembly)
   (-> track-assembly? rsound?)
-  (define asm (track-assembly-assembly assembly))
-  (define rs-asm (map (lambda (note-asm)
+  (define asm (sort (track-assembly-assembly assembly) (lambda (a b) (< (note-assembly-in-sample a) (note-assembly-in-sample b)))))
+  (define rs-asm (map (lambda (note-asm i)
                         (define s (note-assembly-sound note-asm))
                         (define s-len (rs-frames s))
+                        (define chop? (note-assembly-chop? note-asm))
                         (define in (round (note-assembly-in-sample note-asm)))
-                        (define out (round (note-assembly-out-sample note-asm)))
-                        (define rs (clip s 0 (min (- out in) s-len)))
-                        (list rs in)) asm))
+                        (define out (round (if (and chop? (< i (- (length asm) 1))) (note-assembly-in-sample (list-ref asm (+ i 1))) (+ in s-len))))
+                        (define rs (rs-scale 0.3 (clip s 0 (min (- out in) s-len)))) ; scale by 0.3 is a hack to not burst my eardrums -- fix it.
+                        (list rs in))
+                      asm (build-list (length asm) values)))
   (assemble rs-asm))
 
 ; loads a wav file based on the given filepath

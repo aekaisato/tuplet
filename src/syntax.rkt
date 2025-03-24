@@ -7,7 +7,7 @@
 (begin-for-syntax
   ; a oneshot is either a note, tuplet, or pattern
   (define-syntax-class oneshot
-    (pattern (~or t:tup n:note p:pat)))
+    (pattern (~or t:tup n:note p:pat poly:poly)))
 
   ; a note within a track should just be a binding to a note
   (define-syntax-class note
@@ -17,6 +17,10 @@
   (define-syntax-class tup
     (pattern (beats:number oneshot:oneshot ...)))
 
+  ; a polyrhythm is an expression marked by `:` consisting of a series of patterns
+  (define-syntax-class poly
+    (pattern ((~datum :) pat:pat ...)))
+  
   ; a pattern is a series of zero or more oneshots
   (define-syntax-class pat
     (pattern (oneshot:oneshot ...)))
@@ -75,11 +79,18 @@
     [(_ p:pat) #'(rt:pattern (list (compile-oneshot p.oneshot) ...))]))
 
 ; Syntax -> Syntax
+; converts a polyrhythm syntax object to a runtime polyrhythm struct
+(define-syntax compile-polyrhythm
+  (syntax-parser
+    [(_ p:poly) #'(rt:polyrhythm (list (compile-pattern p.pat) ...))]))
+
+; Syntax -> Syntax
 ; converts a oneshot syntax object to its respective runtime struct, depending on its shape
 (define-syntax compile-oneshot
   (syntax-parser
     [(_ n:note) #'n]
     [(_ t:tup) #'(compile-tuplet t)]
+    [(_ p:poly) #'(compile-polyrhythm p)]
     [(_ p:pat) #'(compile-pattern p)]))
 
 ; Syntax -> Syntax
@@ -90,4 +101,5 @@
     [(_ (op:prim arg ...)) #'(op arg ...)]
     [(_ n:note) #'n]
     [(_ t:tup) #'(compile-tuplet t)]
+    [(_ p:poly) #'(compile-polyrhythm p)]
     [(_ p:pat) #'(compile-pattern p)]))
