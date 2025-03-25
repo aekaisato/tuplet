@@ -7,7 +7,7 @@
 (let r (load "./samples/r.wav"))
 (let h (load "./samples/h.wav" #:chop? #f))
 (let _ (1))
-(let three-two (: (s s s) (k k)))
+(let three-two (: (k k) (s s s)))
 
 (track syntaxtest1 180
        (4 k r s r)

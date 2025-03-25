@@ -104,7 +104,7 @@
                         (define chop? (note-assembly-chop? note-asm))
                         (define in (round (note-assembly-in-sample note-asm)))
                         (define out (round (if (and chop? (< i (- (length asm) 1))) (note-assembly-in-sample (list-ref asm (+ i 1))) (+ in s-len))))
-                        (define rs (rs-scale 0.3 (clip s 0 (min (- out in) s-len)))) ; scale by 0.3 is a hack to not burst my eardrums -- fix it.
+                        (define rs (clip s 0 (min (- out in) s-len)))
                         (list rs in))
                       asm (build-list (length asm) values)))
   (assemble rs-asm))
