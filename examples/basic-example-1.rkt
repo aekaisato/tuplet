@@ -11,10 +11,9 @@
 
 (track syntaxtest1 180
        (4 k r s r)
-       (4 k s (1 _ k) h)
+       (4 three-two three-two)
        (4 k (r (2 s _ r _)))
        (4 s s s s s s s s)
-       (4 (: (s s s s) (k k)) three-two)
        (4 (1 k k) (1 s (1 s k)) (1 r r k k) (1 s (1 s h))))
 
 (play! syntaxtest1)
