@@ -94,22 +94,24 @@
   (-> (listof oneshot?) (not/c negative?) (not/c negative?) (listof note-assembly?))
   (match ls
     ['() '()]
-    [(cons (note sound chop?) rest)
-     (define next-beat (+ starting-sample samples-per-beat))
-     (cons (note-assembly sound starting-sample chop?)
-           (squeeze-oneshot-list rest next-beat samples-per-beat))]
-    [(cons (tuplet beats contents) rest)
-     (define next-beat (+ starting-sample (* samples-per-beat beats)))
-     (append (squeeze-tuplet (tuplet beats contents) starting-sample samples-per-beat)
-             (squeeze-oneshot-list rest next-beat samples-per-beat))]
-    [(cons (pattern contents) rest)
-     (define next-beat (+ starting-sample (* samples-per-beat (rhythm-size contents))))
-     (append (squeeze-pattern (pattern contents) starting-sample samples-per-beat)
-             (squeeze-oneshot-list rest next-beat samples-per-beat))]
-    [(cons (polyrhythm ptrns) rest)
-     (define next-beat (+ starting-sample samples-per-beat))
-     (append (squeeze-polyrhythm (polyrhythm ptrns) starting-sample samples-per-beat)
-             (squeeze-oneshot-list rest next-beat samples-per-beat))]))
+    [(cons this rest)
+     (match this
+       [(note sound chop?)
+        (define next-beat (+ starting-sample samples-per-beat))
+        (cons (note-assembly sound starting-sample chop?)
+              (squeeze-oneshot-list rest next-beat samples-per-beat))]
+       [(tuplet beats contents)
+        (define next-beat (+ starting-sample (* samples-per-beat beats)))
+        (append (squeeze-tuplet this starting-sample samples-per-beat)
+                (squeeze-oneshot-list rest next-beat samples-per-beat))]
+       [(pattern contents)
+        (define next-beat (+ starting-sample (* samples-per-beat (rhythm-size contents))))
+        (append (squeeze-pattern this starting-sample samples-per-beat)
+                (squeeze-oneshot-list rest next-beat samples-per-beat))]
+       [(polyrhythm contents)
+        (define next-beat (+ starting-sample samples-per-beat))
+        (append (squeeze-polyrhythm this starting-sample samples-per-beat)
+                (squeeze-oneshot-list rest next-beat samples-per-beat))])]))
 
 ; squeezes a tuplet by placing notes at in points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-tuplet tup starting-sample samples-per-beat)
