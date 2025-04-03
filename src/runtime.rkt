@@ -196,15 +196,7 @@
 ;      ;;   ;;;      ;;       ;;    ;;   
 
 (module+ test
-  (require rackunit (for-syntax syntax/parse))
-
-  ; util fns/macros
-  (define-syntax check-contract-violation
-    (lambda (stx)
-      (syntax-parse stx
-          [(_ expr) (quasisyntax #,(syntax/loc stx (check-exn #rx"contract violation" (lambda () expr))))])))
-
-  (define (test-file-path [str ""]) (string-append "../examples/for_testing/" str))
+  (require rackunit (for-syntax syntax/parse) (submod "util.rkt" test))
 
   ; oneshot examples
   (define ex-rsound-1 (make-tone 440 0.2 1000))
@@ -241,7 +233,7 @@
                                   (define h (load "../examples/samples/h.wav" #:chop? #f))
                                   (define _ (tuplet 1 (list)))
                                   (define three-two (polyrhythm (list (pattern (list k k)) (pattern (list s s s)))))
-                                  (track "out_integration_1" 180 (list
+                                  (track "out_rt_integration_1" 180 (list
                                                               (tuplet 4 (list k r s r))
                                                               (tuplet 4 (list three-two three-two))
                                                               (tuplet 4 (list k (pattern (list r (tuplet 2 (list s _ r _))))))
@@ -270,7 +262,7 @@
   (define ex-track-onemeasure-nested-out (rs-read (test-file-path "nested_track.wav")))
   (define ex-track-twomeasures-simple-out (rs-read (test-file-path "long_simple_track.wav")))
   (define ex-track-twomeasures-nested-out (rs-read (test-file-path "long_nested_track.wav")))
-  (define ex-track-integration-out (rs-read (test-file-path "integration_1.wav")))
+  (define ex-track-integration-out (rs-read (test-file-path "rt_integration_1.wav")))
 
   ; note(?) tests
   (check-equal? (note? ex-note-simple) #t)
