@@ -11,5 +11,6 @@
           [rt:stretch stretch]
           [rt:note-reverse reverse]
           [rt:resample resample]
+          [rt:set-chop set-chop]
           [rt:play! play!]
           [rt:save! save!]))

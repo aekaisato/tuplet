@@ -1,47 +1,8 @@
 #lang racket
 
-(require rsound "ffmpeg-filter.rkt" ffi/vector)
+(require rsound "ffmpeg-filter.rkt" ffi/vector "squeeze.rkt")
 
-(provide oneshot? note note? tuplet tuplet? pattern pattern? polyrhythm polyrhythm? track track? squeeze-track assemble-track load pitch stretch note-reverse resample play! save!)
-
-;       ;;                                  ;;             ;;;        
-;       ;;                                  ;;            ;;;;        
-;       ;;           ;;                     ;;           ;;;;         
-;       ;;           ;;                     ;;           ;;           
-;    ;;;;;  ;;;;;   ;;;;;  ;;;;;         ;;;;;   ;;;;    ;;     ;;;;  
-;   ;;;;;;   ;;;;;  ;;;;;   ;;;;;       ;;;;;;  ;;;;;;   ;;;;  ;;;;;; 
-;  ;;;  ;;      ;;   ;;        ;;      ;;;  ;; ;;;  ;;  ;;;;;  ;;  ;; 
-;   ;;  ;;  ;;;;;;   ;;    ;;;;;;       ;;  ;;  ;;  ;;  ;;;;;  ;;     
-;   ;;  ;;  ;;;;;;   ;;    ;;;;;;       ;;  ;;  ;;;;;;   ;;    ;;;;   
-;   ;;  ;;  ;;  ;;   ;;    ;;  ;;       ;;  ;;  ;;       ;;     ;;;;; 
-;   ;;  ;;  ;;  ;;   ;;    ;;  ;;       ;;  ;;  ;;  ;;   ;;        ;; 
-;   ;;  ;;  ;;  ;;   ;;    ;;  ;;       ;;  ;;  ;;  ;;   ;;    ;;  ;; 
-;   ;;;;;;  ;;;;;;;  ;;;;  ;;;;;;;      ;;;;;;  ;;;;;    ;;    ;;;;;  
-;    ;;;;    ;;;       ;;   ;;;          ;;;;    ;;;     ;;      ;;   
-
-; a oneshot is either a note, tuplet, or pattern
-(define/contract (oneshot? x) (-> any/c boolean?) (or (tuplet? x) (note? x) (pattern? x) (polyrhythm? x)))
-
-; represents a single sound that can be played
-(define-struct/contract note ([sound rsound?] [chop? boolean?]))
-
-; represents a series of oneshots that "squeeze" to fit into the given number of beats
-(define-struct/contract tuplet ([beats (and/c positive? rational?)] [contents (listof oneshot?)]))
-
-; represents a series of oneshots that don't "squeeze" to fit into the given number of beats
-(define-struct/contract pattern ([contents (listof oneshot?)]))
-
-; represents a series of patterns that will all play at once to create polyrhthmic sequences
-(define-struct/contract polyrhythm ([contents (listof pattern?)]))
-
-; represents a full audio track
-(define-struct/contract track ([name string?] [bpm (and/c positive? rational?)] [measures (non-empty-listof tuplet?)]))
-
-; intermediary format for notes that includes the sample to start playing and the sample to stop playing
-(define-struct/contract note-assembly ([sound rsound?] [in-sample (and/c (not/c negative?) rational?)] [chop? boolean?]) #:transparent)
-
-; intermediate format for tracks intended to map to input for rsound's assemble
-(define-struct/contract track-assembly ([name string?] [assembly (non-empty-listof note-assembly?)]) #:transparent)
+(provide oneshot? note note? tuplet tuplet? pattern pattern? polyrhythm polyrhythm? track track? squeeze-track assemble-track load pitch stretch note-reverse resample set-chop play! save!)
 
 ;                                ;;                          ;;                       
 ;                                ;;                          ;;                    ;; 
@@ -77,15 +38,6 @@
   (define sample-rate (default-sample-rate))
   (inexact->exact (round (* (* (/ 1 bpm) 60) sample-rate))))
 
-(define/contract (rhythm-size oneshot-list)
-  (-> (listof oneshot?) integer?)
-  (match oneshot-list
-    ['() 0]
-    [(cons (note _ _) rest) (+ 1 (rhythm-size rest))]
-    [(cons (tuplet beats _) rest) (+ beats (rhythm-size rest))]
-    [(cons (pattern contents) rest) (+ (rhythm-size contents) (rhythm-size rest))]
-    [(cons (polyrhythm ptrns) rest) (+ 1 (rhythm-size rest))]))
-
 ; squeezes a track by placing notes at in-out points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-track track)
   (-> track? track-assembly?)
@@ -101,50 +53,8 @@
 
 ; squeezes a list of oneshots by placing notes at in-out points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-oneshot-list ls starting-sample samples-per-beat)
-  (-> (listof oneshot?) (not/c negative?) (not/c negative?) (listof note-assembly?))
-  (match ls
-    ['() '()]
-    [(cons this rest)
-     (match this
-       [(note sound chop?)
-        (define next-beat (+ starting-sample samples-per-beat))
-        (cons (note-assembly sound starting-sample chop?)
-              (squeeze-oneshot-list rest next-beat samples-per-beat))]
-       [(tuplet beats contents)
-        (define next-beat (+ starting-sample (* samples-per-beat beats)))
-        (append (squeeze-tuplet this starting-sample samples-per-beat)
-                (squeeze-oneshot-list rest next-beat samples-per-beat))]
-       [(pattern contents)
-        (define next-beat (+ starting-sample (* samples-per-beat (rhythm-size contents))))
-        (append (squeeze-pattern this starting-sample samples-per-beat)
-                (squeeze-oneshot-list rest next-beat samples-per-beat))]
-       [(polyrhythm contents)
-        (define next-beat (+ starting-sample samples-per-beat))
-        (append (squeeze-polyrhythm this starting-sample samples-per-beat)
-                (squeeze-oneshot-list rest next-beat samples-per-beat))])]))
-
-; squeezes a tuplet by placing notes at in points defined by structure, an offset, and the current length of a beat
-(define/contract (squeeze-tuplet tup starting-sample samples-per-beat)
-  (-> tuplet? (not/c negative?) (not/c negative?) (listof note-assembly?))
-  (define tup-beats (tuplet-beats tup))
-  (define tup-contents (tuplet-contents tup))
-  (define size (rhythm-size tup-contents))
-  (cond [(= size 0) '()]
-        [else (define ratio (/ tup-beats size))
-              (squeeze-oneshot-list tup-contents starting-sample (* samples-per-beat ratio))]))
-
-; places in points for notes contained in a pattern
-(define/contract (squeeze-pattern pat starting-sample samples-per-beat)
-  (-> pattern? (not/c negative?) (not/c negative?) (listof note-assembly?))
-  (squeeze-oneshot-list (pattern-contents pat) starting-sample samples-per-beat))
-
-; places in points for notes contained in a polyrhythm
-(define/contract (squeeze-polyrhythm poly starting-sample samples-per-beat)
-  (-> polyrhythm? (not/c negative?) (not/c negative?) (listof note-assembly?))
-  (define ptrns (polyrhythm-contents poly))
-  (flatten (map (lambda (pat)
-                  (squeeze-pattern pat starting-sample (/ samples-per-beat (rhythm-size (pattern-contents pat)))))
-                ptrns)))
+  (-> (and/c (listof oneshot?) (not/c contains-placeholder?)) (not/c negative?) (not/c negative?) (listof note-assembly?))
+  (squeeze-helper ls starting-sample samples-per-beat))
 
 ; assembles a track-assembly to a single rsound that can be played or exported as audio
 (define/contract (assemble-track assembly)
@@ -155,7 +65,11 @@
                         (define s-len (rs-frames s))
                         (define chop? (note-assembly-chop? note-asm))
                         (define in (round (note-assembly-in-sample note-asm)))
-                        (define out (round (if (and chop? (< i (- (length asm) 1))) (note-assembly-in-sample (list-ref asm (+ i 1))) (+ in s-len))))
+                        (define out (round (if chop?
+                                               (if (< i (- (length asm) 1))
+                                                   (note-assembly-in-sample (list-ref asm (+ i 1)))
+                                                   (note-assembly-chop-sample note-asm))
+                                               (+ in s-len))))
                         (define rs (clip s 0 (min (- out in) s-len)))
                         (list rs in))
                       asm (build-list (length asm) values)))
@@ -243,10 +157,21 @@
   (match n
     [(note sound chop?) (note (resample/interp factor sound) chop?)]))
 
+; set the chop? option on the note
+(define/contract (set-chop n chop?)
+  (-> note? boolean? note?)
+  (match n
+    [(note sound _) (note sound chop?)]))
+
 ; plays the track output through the default audio device
-(define/contract (play! track)
-  (-> track-assembly? void?)
-  (play (assemble-track track))
+(define/contract (play! . tracks)
+  (-> track-assembly? ... void?)
+  (define num-tracks (length tracks))
+  (define overlaid-tracks (rs-overlay*
+                           (map (lambda (t)
+                                  (rs-scale (/ 1 num-tracks) (assemble-track t)))
+                                tracks)))
+  (play overlaid-tracks)
   (void))
 
 ; saves a wav file containing the track output audio at the specified path (defaults to cwd)
@@ -321,20 +246,20 @@
 
   ; assembly examples
   (define ex-track-onemeasure-simple-asm (track-assembly "out_simple_track" (list
-                                                            (note-assembly ex-rsound-1 0 #t) (note-assembly ex-rsound-2 52920 #f))))
+                                                            (note-assembly ex-rsound-1 0 #t 52920) (note-assembly ex-rsound-2 52920 #f 105840))))
   (define ex-track-onemeasure-nested-asm (track-assembly "out_nested_track" (list
-                                                                         (note-assembly ex-rsound-1 0 #t) (note-assembly ex-rsound-2 1323000/209 #f)
-                                                                         (note-assembly ex-rsound-1 661500/19 #t) (note-assembly ex-rsound-2 926100/19 #f)
-                                                                         (note-assembly ex-rsound-1 2116800/19 #t) (note-assembly ex-rsound-2 2315250/19 #f))))
+                                                                         (note-assembly ex-rsound-1 0 #t 1323000/209) (note-assembly ex-rsound-2 1323000/209 #f 2646000/209)
+                                                                         (note-assembly ex-rsound-1 661500/19 #t 926100/19) (note-assembly ex-rsound-2 926100/19 #f 1190700/19)
+                                                                         (note-assembly ex-rsound-1 2116800/19 #t 2315250/19) (note-assembly ex-rsound-2 2315250/19 #f 132300))))
   (define ex-track-twomeasures-simple-asm (track-assembly "out_long_simple_track" (list
-                                                                               (note-assembly ex-rsound-1 0 #t) (note-assembly ex-rsound-2 43200 #f)
-                                                                               (note-assembly ex-rsound-1 86400 #t) (note-assembly ex-rsound-2 129600 #f))))
-  (define ex-track-twomeasures-nested-asm (track-assembly "out_long_nested_track" (list (note-assembly ex-rsound-1 0 #t) (note-assembly ex-rsound-2 2315250/209 #f)
-                                                                                    (note-assembly ex-rsound-1 1157625/19 #t) (note-assembly ex-rsound-2 1620675/19 #f)
-                                                                                    (note-assembly ex-rsound-1 3704400/19 #t) (note-assembly ex-rsound-2 8103375/38 #f)
-                                                                                    (note-assembly ex-rsound-1 231525 #t) (note-assembly ex-rsound-2 50703975/209 #f)
-                                                                                    (note-assembly ex-rsound-1 5556600/19 #t) (note-assembly ex-rsound-2 6019650/19 #f)
-                                                                                    (note-assembly ex-rsound-1 8103375/19 #t) (note-assembly ex-rsound-2 16901325/38 #f))))
+                                                                               (note-assembly ex-rsound-1 0 #t 43200) (note-assembly ex-rsound-2 43200 #f 86400)
+                                                                               (note-assembly ex-rsound-1 86400 #t 129600) (note-assembly ex-rsound-2 129600 #f 172800))))
+  (define ex-track-twomeasures-nested-asm (track-assembly "out_long_nested_track" (list (note-assembly ex-rsound-1 0 #t 2315250/209) (note-assembly ex-rsound-2 2315250/209 #f 4630500/209)
+                                                                                    (note-assembly ex-rsound-1 1157625/19 #t 1620675/19) (note-assembly ex-rsound-2 1620675/19 #f 2083725/19)
+                                                                                    (note-assembly ex-rsound-1 3704400/19 #t 8103375/38) (note-assembly ex-rsound-2 8103375/38 #f 231525)
+                                                                                    (note-assembly ex-rsound-1 231525 #t 50703975/209) (note-assembly ex-rsound-2 50703975/209 #f 53019225/209)
+                                                                                    (note-assembly ex-rsound-1 5556600/19 #t 6019650/19) (note-assembly ex-rsound-2 6019650/19 #f 6482700/19)
+                                                                                    (note-assembly ex-rsound-1 8103375/19 #t 16901325/38) (note-assembly ex-rsound-2 16901325/38 #f 463050))))
 
   ; output examples
   (define ex-track-onemeasure-simple-out (rs-read (test-file-path "simple_track.wav")))
@@ -404,19 +329,19 @@
   (check-contract-violation (track "invalid_list" 150 (list ex-tuplet-simple ex-pattern-simple)))
 
   ; note-assembly(?) tests
-  (check-equal? (note-assembly? (note-assembly ex-rsound-1 0 #t)) #t)
-  (check-equal? (note-assembly? (note-assembly ex-rsound-1 100000 #f)) #t)
-  (check-equal? (note-assembly? (note-assembly ex-rsound-1 4/3 #t)) #t)
+  (check-equal? (note-assembly? (note-assembly ex-rsound-1 0 #t 10)) #t)
+  (check-equal? (note-assembly? (note-assembly ex-rsound-1 100000 #f 1000000)) #t)
+  (check-equal? (note-assembly? (note-assembly ex-rsound-1 4/3 #t 5/3)) #t)
   (check-equal? (note-assembly? ex-note-simple) #f)
-  (check-contract-violation (note-assembly ex-rsound-1 -1 #t))
-  (check-contract-violation (note-assembly ex-rsound-1 3+5i #t))
-  (check-contract-violation (note-assembly ex-rsound-1 +inf.0 #t))
-  (check-contract-violation (note-assembly ex-rsound-1 10 10))
+  (check-contract-violation (note-assembly ex-rsound-1 -1 #t 10))
+  (check-contract-violation (note-assembly ex-rsound-1 3+5i #t 10))
+  (check-contract-violation (note-assembly ex-rsound-1 +inf.0 #t 10))
+  (check-contract-violation (note-assembly ex-rsound-1 10 10 10))
 
   ; track-assembly(?) tests
   (check-equal? (track-assembly? ex-track-twomeasures-nested-asm) #t)
   (check-equal? (track-assembly? ex-track-twomeasures-nested) #f)
-  (check-contract-violation (track-assembly 99 (list (note-assembly ex-rsound-1 0 #t))))
+  (check-contract-violation (track-assembly 99 (list (note-assembly ex-rsound-1 0 #t 1))))
   (check-contract-violation (track-assembly "invalid_list" "stuff"))
   (check-contract-violation (track-assembly "invalid_list" (list)))
   (check-contract-violation (track-assembly "invalid_list" (list ex-note-simple)))
