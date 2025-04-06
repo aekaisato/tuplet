@@ -2,7 +2,7 @@
 
 (require (prefix-in rt: "runtime.rkt") (prefix-in rsound: rsound) syntax-spec-v3 (for-syntax syntax/parse racket/syntax))
 
-(provide track (rename-out [tlet let]))
+(provide track tlet)
 
 ;                                                              ;;                                         
 ;                            ;;                                ;;                                         
@@ -44,7 +44,7 @@
 
   ; a prim is a built-in function that can appear on the right side of a tlet bind
   (define-syntax-class prim
-    (pattern (~or (~datum load))))
+    (pattern (~or (~datum load) (~datum pitch) (~datum stretch) (~datum reverse) (~datum resample))))
 
   (define positive-rational-error "value must be positive rational number")
   

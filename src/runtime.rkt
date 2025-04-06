@@ -1,8 +1,8 @@
 #lang racket
 
-(require rsound)
+(require rsound "ffmpeg-filter.rkt" ffi/vector)
 
-(provide oneshot? note note? tuplet tuplet? pattern pattern? track track? polyrhythm polyrhythm? squeeze-track assemble-track load play! save!)
+(provide oneshot? note note? tuplet tuplet? pattern pattern? polyrhythm polyrhythm? track track? squeeze-track assemble-track load pitch stretch note-reverse resample play! save!)
 
 ;       ;;                                  ;;             ;;;        
 ;       ;;                                  ;;            ;;;;        
@@ -60,6 +60,16 @@
 ;                                                                           ;;        
 ;                                                                           ;;        
 ;                                                                           ;;        
+
+; options to use for any usage of rubberband for audio stretching
+(define rubberband-shared-opts
+  (list
+   (ff-filter-option "pitchq" "quality")
+   (ff-filter-option "transients" "crisp")
+   (ff-filter-option "detector" "percussive")
+   (ff-filter-option "window" "short")
+   (ff-filter-option "smoothing" "off")
+   (ff-filter-option "formant" "preserved")))
 
 ; convert a number from beats-per-minute to samples-per-beat
 (define/contract (bpm-to-samples bpm)
@@ -163,6 +173,75 @@
         (note (clip rs in (rs-frames rs)) chop?)]
     [out (note (rs-read/clip normpath 0 out) chop?)]
     [#t (note (rs-read normpath) chop?)]))
+
+; pitch a note up/down by the given number of semitones and cents, following 12-tone equal temperament
+(define/contract (pitch n semitones [cents 0])
+  (->* (note? rational?) (rational?) note?)
+  (define total-cents (+ (* 100 semitones) cents))
+  (define exponent (/ total-cents 1200))
+  (define pitch-factor (expt 2 exponent))
+  (define filters (construct-rubberband-filters 1 pitch-factor))
+  (apply-filters-to-note n filters))
+
+; stretch a note's speed by the given factor, without changing its pitch
+(define/contract (stretch n factor)
+  (-> note? (and/c rational? positive?) note?)
+  (define filters (construct-rubberband-filters factor 1))
+  (apply-filters-to-note n filters))
+
+; given factors for tempo and pitch, construct the filters to pass to ffmpeg to perform the stretch
+(define/contract (construct-rubberband-filters tempo pitch)
+  (-> rational? rational? (listof ff-filter?))
+  (list
+   (ff-filter
+    "rubberband"
+    (append
+     (list (ff-filter-option "tempo" (~a tempo)) (ff-filter-option "pitch" (~a pitch)))
+     rubberband-shared-opts))))
+
+; uses ffmpeg to apply a list of filters to a single note
+(define/contract (apply-filters-to-note n filters)
+  (-> note? (listof ff-filter?) note?)
+  (match n
+    [(note sound chop?) (note (apply-ffmpeg-filters sound filters) chop?)]))
+
+; reverses the given note, preserving channels
+(define/contract (note-reverse n)
+  (-> note? note?)
+  (match n
+    [(note (rsound data start end frame-rate) chop?)
+     (match-let* ([orig-list (s16vector->list data)]
+                  [(list left right) (split-and-reverse orig-list (s16vector-length data))]
+                  [revlist (interleave left right)])
+       (note (rsound (list->s16vector revlist) start end frame-rate) chop?))]))
+
+; split a list into two lists, each of which are reversed from their order in the original list
+; a length (assumed correct) can be passed to avoid calculating
+(define (split-and-reverse ls [len (length ls)])
+  (->* ((listof any/c)) (nonnegative-integer?) (listof (listof any/c)))
+  (foldl
+   (lambda (cur i acc)
+     (match acc
+       [(list left right)
+        (if (even? i)
+            (list (cons cur left) right)
+            (list left (cons cur right)))]))
+   (list (list) (list))
+   ls (build-list len values)))
+
+; interleave two lists into a single list that alternates between the two, starting with ls1
+(define/contract (interleave ls1 ls2)
+  (-> (listof any/c) (listof any/c) (listof any/c))
+  (match (list ls1 ls2)
+    [(list (cons a rest1) (cons b rest2)) (cons a (cons b (interleave rest1 rest2)))]
+    [(list (list) ls2) ls2]
+    [(list ls1 (list)) ls1]))
+
+; stretch a note's speed by the given factor, not correcting for pitch
+(define/contract (resample n factor)
+  (-> note? (and/c rational? positive?) note?)
+  (match n
+    [(note sound chop?) (note (resample/interp factor sound) chop?)]))
 
 ; plays the track output through the default audio device
 (define/contract (play! track)
@@ -391,6 +470,36 @@
   (check-contract-violation (load "." #:out -10))
   (check-contract-violation (load "." #:out 10.5))
   (check-contract-violation (load "." #:chop? -10))
+
+  ; pitch tests
+  (check-equal? (note-sound (pitch ex-note-simple 2)) (note-sound (load (test-file-path "440hz-pitch-up-2s.wav"))))
+  (check-equal? (note-sound (pitch ex-note-simple 2 50)) (note-sound (load (test-file-path "440hz-pitch-up-2s50c.wav"))))
+  (check-equal? (note-sound (pitch ex-note-simple -7)) (note-sound (load (test-file-path "440hz-pitch-down-7s.wav"))))
+  (check-equal? (note-sound (pitch ex-note-simple 0)) (note-sound (load (test-file-path "440hz-pitch-0.wav"))))
+  (check-contract-violation (pitch ex-tuplet-simple 1))
+
+  ; stretch tests
+  (check-equal? (note-sound (stretch ex-note-simple 0.5)) (note-sound (load (test-file-path "440hz-stretch-0.5.wav"))))
+  (check-equal? (note-sound (stretch ex-note-simple 2)) (note-sound (load (test-file-path "440hz-stretch-2.wav"))))
+  (check-equal? (note-sound (stretch ex-note-simple 1)) (note-sound (load (test-file-path "440hz-stretch-1.wav"))))
+  (check-contract-violation (stretch ex-tuplet-simple 1))
+  (check-contract-violation (stretch ex-note-simple 0))
+  (check-contract-violation (stretch ex-note-simple -1))
+
+  ; resample tests
+  (check-equal? (note-sound (resample ex-note-simple 0.5)) (note-sound (load (test-file-path "440hz-resample-0.5.wav"))))
+  (check-equal? (note-sound (resample ex-note-simple 2)) (note-sound (load (test-file-path "440hz-resample-2.wav"))))
+  (check-equal? (note-sound (resample ex-note-simple 1)) (note-sound (load (test-file-path "440hz-resample-1.wav"))))
+  (check-contract-violation (resample ex-tuplet-simple 1))
+  (check-contract-violation (resample ex-note-simple 0))
+  (check-contract-violation (resample ex-note-simple -1))
+
+  ; note-reverse tests
+  (define nleft (load (test-file-path "noise_left.wav")))
+  (define nright (load (test-file-path "noise_right.wav")))
+  (check-equal? (note-sound (note-reverse nleft)) (note-sound (load (test-file-path "noise_left-rev.wav"))))
+  (check-equal? (note-sound (note-reverse nright)) (note-sound (load (test-file-path "noise_right-rev.wav"))))
+  (check-contract-violation (note-reverse ex-tuplet-simple))
 
   ; play! tests
   (check-contract-violation (play! ex-track-onemeasure-simple))
