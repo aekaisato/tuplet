@@ -18,7 +18,6 @@
        (4 (1 s-pitch2 (1 k1 k1)) (1 s3 s3 s3) (1 h5 (1 k1 k1)) (1 s1 s2 s1))
        (4 (1 (s1 s3 s1 s3 s1 s3 s1 s3)) (1 h5 h5) (1 k-down (1 k-down k-down)) (1 s1 s-rev))
        (4 (1 s-pitch2 (1 k1 k1)) (1 s1 s1) (1 (1 k1 k1) s1) (1 s1 (1 s-pitch2 s-pitch2 s-pitch4)))
-       (4 (1 k1 s-rev) (1 k1 s-rev) (1 (: (k1 k1) (s1 s1 s1))) (1 k1 (1 s-pitch2 s-pitch2 s-pitch2 s-pitch2 s-pitch2)))
-       )
+       (4 (1 k1 s-rev) (1 k1 s-rev) (1 (: (k1 k1) (s1 s1 s1))) (1 k1 (1 s-pitch2 s-pitch2 s-pitch2 s-pitch2 s-pitch2))))
 
 (play! complex_example)
