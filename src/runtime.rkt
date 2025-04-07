@@ -2,7 +2,9 @@
 
 (require rsound "ffmpeg-filter.rkt" ffi/vector "squeeze.rkt")
 
-(provide oneshot? note note? tuplet tuplet? pattern pattern? polyrhythm polyrhythm? track track? squeeze-track assemble-track load pitch stretch note-reverse resample set-chop play! save!)
+(provide oneshot? note note? tuplet tuplet? pattern pattern? polyrhythm polyrhythm? track track?
+         squeeze-track assemble-track load pitch stretch note-reverse resample set-chop play! save!
+         clip-using-placeholder clip-using-pattern)
 
 ;                                ;;                          ;;                       
 ;                                ;;                          ;;                    ;; 
@@ -185,6 +187,25 @@
       [(or 'directory 'directory-link) (build-path normpath (string-append name ".wav"))]
       [_ normpath]))
   (rs-write (assemble-track track) fullpath))
+
+; given a note and a placeholder-assembly, clips the note with the placeholder's in/out points
+(define/contract (clip-using-placeholder n pl n-clip?)
+  (-> note? placeholder-assembly? boolean? note?)
+  (note
+   (clip (note-sound n)
+         (floor (placeholder-assembly-in-sample pl))
+         (floor (placeholder-assembly-chop-sample pl)))
+   n-clip?))
+
+; given a note and a pattern, returns a list of clipped notes based on the 
+; in/out points resulting from squeezing the pattern to the note sound's length
+(define/contract (clip-using-pattern n pat [n-clip? #t])
+  (->* (note? pattern?) (boolean?) (listof note?))
+  (define pat-contents (pattern-contents pat))
+  (define pat-size (rhythm-size pat-contents))
+  (define note-samples (rs-frames (note-sound n)))
+  (map (lambda (pl) (clip-using-placeholder n pl n-clip?))
+       (squeeze-helper pat-contents 0 (/ note-samples pat-size))))
 
 ;    ;;                     ;;           
 ;    ;;                     ;;           

@@ -96,7 +96,7 @@
 
 (syntax-spec
  ; track - binds a series of tuplets as a squeezed track
- ; <track> := (track [Datum] [Rational] (<tuplet>...+))
+ ; <track> := (track [Identifer] [Rational] (<tuplet>...+))
  (host-interface/definitions
   (track name:racket-var bpm:number measure:tup ...+)
   #:binding (export name)
@@ -135,35 +135,33 @@
 ; converts a tuplet syntax object to a runtime tuplet struct
 (define-syntax compile-tuplet
   (syntax-parser
-    [(_ t:tup) #'(rt:tuplet t.beats (list (compile-oneshot t.oneshot) ...))]
-    [(_ t:tup 'placeholder) #'(rt:tuplet t.beats (list (compile-oneshot t.oneshot 'placeholder) ...))]))
+    [(_ t:tup opt ...) #'(rt:tuplet t.beats (list (compile-oneshot t.oneshot opt ...) ...))]))
 
 ; Syntax -> Syntax
 ; converts a pattern syntax object to a runtime pattern struct
 (define-syntax compile-pattern
   (syntax-parser
-    [(_ p:pat) #'(rt:pattern (list (compile-oneshot p.oneshot) ...))]
-    [(_ p:pat 'placeholder) #'(rt:pattern (list (compile-oneshot p.oneshot 'placeholder) ...))]))
+    [(_ p:pat opt ...) #'(rt:pattern (list (compile-oneshot p.oneshot opt ...) ...))]))
 
 ; Syntax -> Syntax
 ; converts a polyrhythm syntax object to a runtime polyrhythm struct
 (define-syntax compile-polyrhythm
   (syntax-parser
-    [(_ p:poly) #'(rt:polyrhythm (list (compile-pattern p.pat) ...))]
-    [(_ p:poly 'placeholder) #'(rt:polyrhythm (list (compile-pattern p.pat 'placeholder) ...))]))
+    [(_ p:poly opt ...) #'(rt:polyrhythm (list (compile-pattern p.pat opt ...) ...))]))
 
 ; Syntax -> Syntax
 ; converts a oneshot syntax object to its respective runtime struct, depending on its shape
 (define-syntax compile-oneshot
   (syntax-parser
-    [(_ n:note) #'n]
-    [(_ n:note 'placeholder) #'(sq:placeholder (quote n))]
-    [(_ t:tup) #'(compile-tuplet t)]
-    [(_ t:tup 'placeholder) #'(compile-tuplet t 'placeholder)]
-    [(_ p:poly) #'(compile-polyrhythm p)]
-    [(_ p:poly 'placeholder) #'(compile-polyrhythm p 'placeholder)]
-    [(_ p:pat) #'(compile-pattern p)]
-    [(_ p:pat 'placeholder) #'(compile-pattern p 'placeholder)]))
+    [(_ n:note opts ...)
+     (define d-opts (flatten (map syntax->datum (syntax->list #'(opts ...)))))
+     (if (member 'placeholder d-opts)
+         #'(sq:placeholder (quote n))
+         #'n)
+     ]
+    [(_ t:tup opt ...) #'(compile-tuplet t opt ...)]
+    [(_ p:poly opt ...) #'(compile-polyrhythm p opt ...)]
+    [(_ p:pat opt ...) #'(compile-pattern p opt ...)]))
 
 ; Syntax -> Syntax
 ; if the bind is a known expression, returns that expression
@@ -171,35 +169,18 @@
 (define-syntax compile-bind
   (syntax-parser
     [(_ (op:prim arg ...)) #'(op arg ...)]
-    [(_ n:note) #'n]
-    [(_ t:tup) #'(compile-tuplet t)]
-    [(_ t:tup 'placeholder) #'(compile-tuplet t 'placeholder)]
-    [(_ p:poly) #'(compile-polyrhythm p)]
-    [(_ p:pat) #'(compile-pattern p)]))
+    [(_ os:oneshot opt ...) #'(compile-oneshot os opt ...)]))
 
 ; Syntax -> Syntax
 ; expands a pattern and an expression that evaluates to a note
 ; to a series of bindings, representing the pattern spread out
 ; to fit the entire sound
-; most of the computation occurs at runtime, due to the reliance
-; on applying runtime functions to an already compiled pattern
+; INVARIANT - this macro is expected to output the same number of
+;             values as there are bindings
 (define-syntax compile-bind-expr-values
   (syntax-parser
-    [(_ pat:pat expr:expr)
-     #'(let ([tmp-note-sound (sq:note-sound expr)]
-             [tmp-pat-contents (sq:pattern-contents (compile-pattern pat 'placeholder))])
-         (apply values
-                (map (lambda (placeholder)
-                       (sq:note
-                        (rsound:clip
-                         tmp-note-sound
-                         (floor (sq:placeholder-assembly-in-sample placeholder))
-                         (floor (sq:placeholder-assembly-chop-sample placeholder)))
-                        #t))
-                     (sq:squeeze-helper
-                      tmp-pat-contents 0
-                      (/ (rsound:rs-frames tmp-note-sound)
-                         (sq:rhythm-size tmp-pat-contents))))))]))
+    [(_ pat:pat rt-note:expr)
+     #'(apply values (rt:clip-using-pattern rt-note (compile-pattern pat 'placeholder)))]))
 
 ;    ;;                     ;;           
 ;    ;;                     ;;           
