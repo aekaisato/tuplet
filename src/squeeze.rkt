@@ -50,7 +50,7 @@
 
 ; check if oneshot contains a placeholder or not
 (define/contract (contains-placeholder? os)
-  (-> any/c boolean?)
+  (-> oneshot? boolean?)
   (match os
     [(note _ _) #f]
     [(placeholder _) #t]

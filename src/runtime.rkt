@@ -55,7 +55,7 @@
 
 ; squeezes a list of oneshots by placing notes at in-out points defined by structure, an offset, and the current length of a beat
 (define/contract (squeeze-oneshot-list ls starting-sample samples-per-beat)
-  (-> (and/c (listof oneshot?) (not/c contains-placeholder?)) (not/c negative?) (not/c negative?) (listof note-assembly?))
+  (-> (and/c (listof (and/c oneshot? (not/c contains-placeholder?)))) (not/c negative?) (not/c negative?) (listof note-assembly?))
   (squeeze-helper ls starting-sample samples-per-beat))
 
 ; assembles a track-assembly to a single rsound that can be played or exported as audio
